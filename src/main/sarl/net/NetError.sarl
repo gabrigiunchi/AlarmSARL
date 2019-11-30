@@ -1,0 +1,23 @@
+package net
+
+import java.io.IOException
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato dall'agente SocketAgent quando si verifica un errore di rete
+ * La variabile error può contenere l'oggetto Exception che identifica l'errore
+ *
+ */
+event NetError {
+	
+	val error : Exception
+	
+	new() {
+		this(new IOException("Net error"))
+	}
+	
+	new (e : Exception) {
+		this.error = e
+	}
+}

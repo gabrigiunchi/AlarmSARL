@@ -1,0 +1,18 @@
+package io
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato quando viene stabilita una connessione con Arduino
+ *
+ */
+event DeviceConnected {
+	
+	val port : String
+	val baud : int
+	
+	new (port : String, baud : int = 9600) {
+		this.port = port
+		this.baud = baud
+	}
+}

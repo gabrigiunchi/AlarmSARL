@@ -1,0 +1,6 @@
+syntax: glob
+src/main/generated-sources/*
+target/*
+*.bat
+tesi.jar
+*.prefs

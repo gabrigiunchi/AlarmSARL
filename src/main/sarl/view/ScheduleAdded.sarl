@@ -1,0 +1,15 @@
+/**
+ * 
+ */
+package view
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato da AddScheduleDialog quando viene aggiunto
+ * correttamente un nuovo schedule. 
+ * Lo scopo di questo evento è aggiornare eventuali interfacce grafiche e/o 
+ * notificare altri componenti
+ *
+ */
+event ScheduleAdded

@@ -1,0 +1,12 @@
+/**
+ * 
+ */
+package net
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento per terminare l'esecuzione dell'agente ServerAgent
+ *
+ */
+event CloseServer

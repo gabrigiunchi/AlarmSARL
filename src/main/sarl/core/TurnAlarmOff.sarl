@@ -1,0 +1,9 @@
+package core
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento per disattivare l'allarme di un sistema
+ *
+ */
+event TurnAlarmOff

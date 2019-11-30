@@ -1,0 +1,16 @@
+package core
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato da SystemAgent quando si verifica la disconnessione di un sistema
+ *
+ */
+event SystemDisconnected {
+	
+	val key : int
+	
+	new (key : int) {
+		this.key = key
+	}
+}

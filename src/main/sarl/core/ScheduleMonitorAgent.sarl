@@ -1,0 +1,126 @@
+package core
+
+import io.sarl.core.Initialize
+import io.sarl.core.AgentTask
+import io.sarl.core.Schedules
+import schedule.AlarmScheduleManager
+import schedule.AlarmSchedulePlan
+import java.util.List
+import io.sarl.core.Destroy
+import io.sarl.core.DefaultContextInteractions
+import io.sarl.core.Logging
+import io.sarl.core.Lifecycle
+import io.sarl.util.OpenEventSpace
+import io.sarl.util.OpenEventSpaceSpecification
+import java.util.UUID
+import io.sarl.core.Behaviors
+import net.NetError
+import java.time.LocalTime
+import schedule.ScheduleActionType
+import java.time.DayOfWeek
+import java.time.LocalDate
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Agente che periodicamente controlla gli schedule associati ad un sistema
+ * ed esegue le azioni associate ad essi. 
+ * E' associato ad un solo sistema
+ *
+ */
+agent ScheduleMonitorAgent {
+	
+	uses Schedules, DefaultContextInteractions, Logging, Lifecycle, Behaviors
+	
+	/*
+	 * Costanti che identificano il tipo di azione che bisogna effettuare
+	 */
+	val noTimeTriggered = 0
+	val startTimeTriggered = new Integer(1)
+	val endTimeTriggered = new Integer(2)
+	
+	var systemId : String = ""
+	var list : List<AlarmSchedulePlan> // Riferimento alla lista degli scheduel
+	var space : OpenEventSpace // Space in cui lanciare e ricevere gli eventi
+	
+	var task : AgentTask
+	var lastUpdate : LocalTime
+	var currentTime : LocalTime
+	
+	/*
+	 * I parametri di inizializzazione sono: 
+	 * 
+	 * - id del sistema (String)
+	 * - id dello space in cui inviare e ricevere gli eventi (UUID)
+	 */
+	on Initialize[!occurrence.parameters.empty] {
+		this.systemId = occurrence.parameters.get(0) as String
+		this.space = defaultContext.getOrCreateSpaceWithID(occurrence.parameters.get(1) as UUID,
+			typeof(OpenEventSpaceSpecification)
+		)
+		space.register(asEventListener)
+	
+		// Ottengo il riferimento alla lista di schedule
+		list = AlarmScheduleManager.instance.getSchedulesForSystem(systemId)
+		
+		// Task periodico dove si controllano gli schedule
+		task = task("schedule_task " + systemId)
+		task.every(1000)[
+			list.forEach[
+				switch(it.triggered) {
+					case startTimeTriggered : {
+						info("Planned action: turn on alarm on system " + systemId)
+						emit(new SetSystemEnabled(true))
+					}
+					case endTimeTriggered : {
+						info("Planned action: turn off alarm on system " + systemId)
+						emit(new SetSystemEnabled(false))	
+					}
+					default : { }
+				}
+			]
+			
+			lastUpdate = currentTime
+		]
+		
+		info("ScheduleMonitorAgent per il sistema " + systemId + " inizializzato")
+	}
+	
+	private def isTriggered(schedule : AlarmSchedulePlan) : int {
+		// Recupero giorno e ora corrente
+		val currentDay = DayOfWeek.from(LocalDate.now());
+		currentTime = LocalTime.of(LocalTime.now().getHour(), LocalTime.now().getMinute());
+		
+		/*
+		 * Se il giorno corrente coincide con il giorno dello schedule
+		 * e l'ora corrente non coincide con l'ora dell'ultima azione eseguita 
+		 * proseguo con l'analisi delle azioni dello schedule
+		 */
+		if(schedule.day.equals(currentDay) && !currentTime.equals(lastUpdate)) {
+			// Filtro per ora di attivazione dell'azione
+			val action = schedule.actions.stream
+				.filter[it.time.equals(currentTime)]
+				.findFirst
+				
+			// Se almeno un'azione dello schedule ha i requisiti per essere attivata
+			if(action.present) {
+				switch(action.get.type) {
+					case ScheduleActionType.turn_on : return startTimeTriggered
+					case ScheduleActionType.turn_off : return endTimeTriggered
+					default: return noTimeTriggered
+				}
+			}
+		}	
+		
+		return noTimeTriggered
+	}
+	
+	on NetError {
+		killMe
+	}
+	
+	on Destroy {
+		info("Destroying ScheduleMonitorAgent " + systemId)
+		task.cancel
+	}	
+}

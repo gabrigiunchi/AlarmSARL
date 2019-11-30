@@ -1,0 +1,264 @@
+package view
+
+import io.sarl.core.Initialize
+import javax.swing.JFrame
+import javax.swing.JComboBox
+import java.awt.FlowLayout
+import io.sarl.core.DefaultContextInteractions
+import javax.swing.JLabel
+import javax.swing.JButton
+import io.sarl.core.Logging
+import static utilities.Utilities.getSystems
+import static model.SystemDetail.SystemState.unknown
+import static utilities.Utilities.getImageBySystemState
+import static utilities.Utilities.getStateDescriptionForState
+import javax.swing.JPanel
+import java.awt.BorderLayout
+import java.awt.GridBagLayout
+import java.awt.GridBagConstraints
+import java.awt.Insets
+import io.sarl.core.Lifecycle
+import io.sarl.core.Schedules
+import io.sarl.core.InnerContextAccess
+import core.SetSystemEnabled
+import core.TurnAlarmOff
+import javax.swing.JOptionPane
+import model.SystemDetail
+import core.SetSystemName
+import java.util.ArrayList
+import javax.swing.BorderFactory
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * View che mostra i dettagli di un sistema e permette all'utente di interagire con essi
+ *
+ */
+agent DetailView {
+	
+	uses DefaultContextInteractions, Logging, Lifecycle, Schedules, InnerContextAccess
+	
+	val deactivateAlarm = 2
+	val alarmOffPendingActionCode = new Integer(1)
+	val noPendingAction = -1
+	
+	var pendingAction = noPendingAction
+	var selectedSystemKey = -1
+	var frame : JFrame
+	
+	/********************** NORTH *************************/
+	val noDevicesLabel : JLabel = new JLabel("There aren't connected devices")
+	val label = new JLabel("Device: ")
+	val comboBox : JComboBox<String> = new JComboBox
+	
+	/********************** CENTER  ********************/
+	
+	// First row
+	val label2 = new JLabel("Device state: ")
+	var image : JLabel
+	val stateLabel = new JLabel
+	
+	// Second row
+	var actionButton : JButton
+	var changeNameButton : JButton
+	val showScheduleButton = new JButton("Show alarm schedules")
+	
+	on Initialize {
+		frame = new JFrame
+		frame.title = "Detail View"
+		frame.setSize(550, 200)
+		frame.defaultCloseOperation = JFrame.DISPOSE_ON_CLOSE;
+		frame.locationRelativeTo = null
+		frame.contentPane.layout = new BorderLayout
+	
+		
+		/***************** NORTH *************/
+		comboBox.addActionListener[
+			if(comboBox.itemCount > 0 && !systems.keySet.empty){
+				selectedSystemKey = new ArrayList(systems.keySet).get(comboBox.selectedIndex)
+			}
+			updateDetails
+		]
+		
+		val nord = new JPanel(new FlowLayout)
+		nord.border = BorderFactory.createEmptyBorder(0, 0, 20, 0)
+		nord.add(noDevicesLabel)
+		nord.add(label)
+		nord.add(comboBox)
+		frame.contentPane.add(nord, BorderLayout.NORTH)
+		
+		/**************** CENTER *************/
+		val center = new JPanel(new BorderLayout)
+		val center_west = new JPanel(new BorderLayout)
+		val center_nord_west = new JPanel(new GridBagLayout)
+		
+		center_west.add(center_nord_west, BorderLayout.NORTH)
+		center.add(center_west, BorderLayout.WEST)
+		frame.contentPane.add(center, BorderLayout.CENTER)
+		
+		val constraints = new GridBagConstraints
+		constraints.anchor = GridBagConstraints.WEST;
+		constraints.gridy = 0	
+		constraints.gridx = 0
+		constraints.insets = new Insets(0, 5, 20, 0);
+		
+		// First row
+		val firstRow = new JPanel(new FlowLayout)
+		image = new JLabel("", getImageBySystemState(unknown), JLabel.CENTER);
+		firstRow.add(label2)
+		firstRow.add(stateLabel)
+		firstRow.add(image)
+		center_nord_west.add(firstRow, constraints)
+		constraints.gridy++
+		
+		// Second row
+		val secondRow = new JPanel(new FlowLayout)
+		actionButton = new JButton("Turn off")
+		actionButton.addActionListener[actionButtonPressed]
+		changeNameButton = new JButton("Set name")
+		changeNameButton.addActionListener[changeNameButtonPressed]
+		showScheduleButton.addActionListener[spawn(ScheduleView, getSelectedSystemDetail, frame)]
+		secondRow.add(actionButton)
+		secondRow.add(changeNameButton)
+		secondRow.add(showScheduleButton)
+		center_nord_west.add(secondRow, constraints)
+		
+		this.updateList
+		this.updateDetails
+		
+		frame.validate
+		frame.visible = true
+		
+		/*
+		 * Task per distruggere l'agente nel caso la view sia stata chiusa
+		 */
+		in(1000)[every(500,[
+			if(!frame.displayable) {
+				info("Destroying DetailView...")
+				killMe
+			}
+		])]
+		
+		info("ViewAgent initialized")
+	}
+	
+	on UpdateView {
+		this.updateList
+	}
+	
+	on PasswordCorrect {
+		info("Password corretta")
+		switch(pendingAction) {
+			case alarmOffPendingActionCode : {
+				val index = comboBox.selectedIndex
+				systems.get(index).agentId.receive(new TurnAlarmOff)
+			}
+			
+			default : { }
+		}
+		
+		pendingAction = noPendingAction
+	}
+	
+	/*
+	 * Crea un dialog di input per il nome del sistema
+	 */
+	private def changeNameButtonPressed {
+		val detail = getSelectedSystemDetail
+		val name = JOptionPane.showInputDialog("Inserisci nome da dare al sistema")
+		if(name.empty) {
+			JOptionPane.showMessageDialog(frame, "Non è possibile inserire un nome vuoto", 
+				"Input", JOptionPane.QUESTION_MESSAGE)
+		} else {
+			detail.name = name
+			detail.agentId.receive(new SetSystemName(name))
+		}
+	}
+
+	private def actionButtonPressed {
+		val details = selectedSystemDetail
+		var state = details.state
+		val uuid = details.agentId
+		
+		switch state {
+			case off : uuid.receive(new SetSystemEnabled(true))
+			case ^on : uuid.receive(new SetSystemEnabled(false))
+			case alarm : {
+				pendingAction = alarmOffPendingActionCode
+				spawnInContext(InsertPasswordDialog, innerContext, deactivateAlarm, frame)	
+			}
+			default: {}
+		}
+	}
+	
+	private def updateDetails() {
+		if(systems.empty) {
+			detailsVisible = false
+			actionButton.visible = false
+			changeNameButton.visible = false
+			showScheduleButton.visible = false
+		} else {
+			val detail = getSelectedSystemDetail
+			val state = detail.state
+			
+			image.icon = getImageBySystemState(state)
+			stateLabel.text = getStateDescriptionForState(state)
+			
+			var actionButtonVisible = true
+			
+			switch state {
+				case ^on : actionButton.setText("Turn off")
+				case off : actionButton.setText("Turn on")
+				case alarm : actionButton.setText("Turn alarm off")
+				default : actionButtonVisible = false
+			}
+			
+			detailsVisible = true	
+			actionButton.visible = actionButtonVisible
+			changeNameButton.visible = true
+			
+			showScheduleButton.visible = !detail.id.empty
+		}
+		
+		frame.revalidate
+		frame.repaint
+	}
+	
+	private def updateList {
+		var selectedIndex = new ArrayList(systems.keySet).indexOf(selectedSystemKey)
+		this.comboBox.removeAllItems
+		
+		systems.entrySet.forEach[
+			val details = it.getValue
+			var name : String = it.getKey.toString
+			
+			if(!details.name.isEmpty) {
+				name = details.name
+			} else if(!details.id.empty) {
+				name = details.id
+			}
+			
+			comboBox.addItem(name)
+		]
+		
+		if(!systems.empty) {
+			if(selectedIndex < 0) {
+				selectedIndex = 0
+			}
+			comboBox.selectedIndex = selectedIndex
+		}
+	}
+	
+	private def setDetailsVisible(isVisible : boolean = true) {
+		#[comboBox, stateLabel, label, label2, stateLabel, image].forEach[it.visible = isVisible]
+		noDevicesLabel.setVisible(!isVisible)
+	}
+	
+	private def getSelectedSystemDetail : SystemDetail {
+		var index = comboBox.selectedIndex
+		if(comboBox.selectedIndex < 0) {
+			index = 0
+		}
+		return new ArrayList(systems.values).get(index)
+	}
+}

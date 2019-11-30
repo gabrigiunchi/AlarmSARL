@@ -1,0 +1,73 @@
+package console
+
+import console.ConsoleHandlerCapacity
+import io.sarl.core.Logging
+import io.sarl.core.DefaultContextInteractions
+import io.IOManager
+import io.MessageToDevice
+import io.CloseConnectionWithDevice
+import model.ConsoleHandlerType
+import static model.ConsoleCommands.IOCommandsCode.io_send
+import static model.ConsoleCommands.IOCommandsCode.io_close
+import static model.ConsoleCommands.IOCommandsCode.io_help
+import static model.ConsoleCommands.IOCommandsCode.io_init
+import static model.ConsoleCommands.IOCommandsCode.io_back
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Skill che implementa ConsoleHandlerCapacity,
+ * gestisce la comunicazione seriale offrendo
+ * la possibilità di inviare e ricevere messaggi
+ *
+ */
+skill SerialCommunicationConsoleHandler implements ConsoleHandlerCapacity {
+	
+	uses Logging, DefaultContextInteractions
+	
+	override install {
+		super.install
+		info("Welcome to io section")
+	}
+	
+	override handleConsoleMessage(s : String) {
+		val line = s
+		val values : String[] = line.split(" ")
+		val command : String = values.get(0).toLowerCase
+		
+		try {
+			switch command {
+				case io_help : showCommandsList
+				
+				case io_init : {
+					val port = values.get(1).toUpperCase
+					val baud = Integer.parseInt(values.get(2))
+					spawn(IOManager, port, baud)
+				}
+				
+				case io_send : {
+					var message = line.split(" ", 2).get(1)
+					emit(new MessageToDevice(message))
+				}
+				
+				case io_close : new CloseConnectionWithDevice().emit
+				case io_back : getOwner().getID.receive(new SwitchConsoleHandler(ConsoleHandlerType.main))
+				default : info("Command not found")	
+			}
+		} catch(e : NumberFormatException) {
+			info("Error parsing arguments")
+		} catch(e : IndexOutOfBoundsException) {
+			info("Some arguments are missing")
+		}
+	}
+	
+	private def showCommandsList {
+		val stringBuilder = new StringBuilder("\n\nAvailable commands: \n")
+		stringBuilder.append("\n" + io_init + " <port> <baud> - Initialize a communication on the given port withe the given bit rate")
+		stringBuilder.append("\n" + io_send + " <message> - Send a message to the connected device")
+		stringBuilder.append("\n" + io_close + " - Close the connection")
+		stringBuilder.append("\n" + io_back + " - Back to main menu")
+		stringBuilder.append("\n")
+		info(stringBuilder.toString)
+	}
+}

@@ -1,0 +1,110 @@
+package io
+
+import io.sarl.core.Initialize
+import gnu.io.SerialPort
+import io.sarl.core.AgentTask
+import io.sarl.core.Schedules
+import io.sarl.core.DefaultContextInteractions
+import utilities.Utilities
+import java.io.OutputStream
+import java.io.InputStream
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import io.sarl.core.Lifecycle
+import io.sarl.core.Logging
+import io.MessageToDevice
+import java.io.IOException
+import io.DeviceConnected
+import io.sarl.core.Destroy
+import io.DeviceDisconnected
+import io.sarl.core.Behaviors
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Gestisce la comunicazione seriale con un micocontrollore Arduino
+ *
+ */
+agent IOManager {
+	
+	uses Schedules, DefaultContextInteractions, Lifecycle, Logging, Behaviors
+	
+	val ARDUINO_READY_DELAY = 2000
+
+	var portName : String
+	var task : AgentTask
+	var serialPort : SerialPort
+	var output : OutputStream
+	var input : InputStream
+	
+	on Initialize[!occurrence.parameters.isEmpty()] {
+		info("Initializing IOManager...")
+		val port = occurrence.parameters.get(0) as String
+		val baud = occurrence.parameters.get(1) as Integer
+		
+		this.portName = port
+		
+		// Inizializzo la connessione
+		try{
+			this.serialPort = Utilities.createSerialPort(port, baud)
+			this.input = serialPort.getInputStream
+			this.output = serialPort.getOutputStream
+		} catch(e : Exception) {
+			error(e.toString + " : Connection to " + portName + " failed")
+			killMe
+		}
+		
+		val reader = new BufferedReader(new InputStreamReader(this.input))
+		
+		/*
+		 * Dopo aver stabilito una connessione seriale con Arduino
+		 * bisogna aspettare 1-2 secondi prima di poter effettivamente comunicare,
+		 * questo perchè lo stesso Arduino effetta un'operazione di reset ed impiega un pò di tempo
+		 * prima di essere pronto
+		 */ 
+		in(ARDUINO_READY_DELAY, [
+			info("IOManager ready to communicate")
+			emit(new DeviceConnected(port, baud))
+		])
+		
+		task = task("io_task")
+		// Main loop di ricezione messaggi
+		task.every(20, [
+			if(reader.ready) {
+				try {
+					var s = reader.readLine
+					info("From device: " + s)
+					emit(new MessageReceivedFromDevice(s))
+				} catch(e : IOException) {
+					wake(new CloseConnectionWithDevice)
+				}
+			}
+		])
+	}
+
+	on MessageToDevice {
+		val s = occurrence.message
+		try {
+			this.output.write((s + '\n').getBytes)
+			this.output.flush
+		} catch(e : IOException) {
+			error(e.getMessage)
+		}
+	}
+	
+	on CloseConnectionWithDevice {
+		info("IOManager : closing connection on port " + portName)
+		
+		try {
+			this.serialPort.close
+		} catch(e : IOException) {}
+		
+		this.task.cancel
+		emit(new DeviceDisconnected)
+		killMe
+	}
+	
+	on Destroy {
+		info("Destroyig IOManager")
+	}
+}

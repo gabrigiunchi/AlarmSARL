@@ -1,0 +1,10 @@
+package net
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato per forzare la chiusura della socket. 
+ * Questo evento è gestito dall'agente SocketAgent
+ *
+ */
+event CloseSocketConnection

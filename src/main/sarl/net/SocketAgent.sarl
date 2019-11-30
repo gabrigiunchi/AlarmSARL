@@ -1,0 +1,81 @@
+package net
+
+import io.sarl.core.Initialize
+import java.net.Socket
+import java.io.InputStreamReader
+import java.io.BufferedReader
+import io.sarl.core.DefaultContextInteractions
+import io.sarl.core.Logging
+import java.io.IOException
+import io.sarl.core.Lifecycle
+import io.sarl.core.Destroy
+import io.sarl.core.Schedules
+import io.sarl.core.AgentTask
+
+/**
+ * @author Gabriele Giunchi
+ *
+ */
+agent SocketAgent {
+	
+	uses DefaultContextInteractions, Logging, Lifecycle, Schedules
+	
+	var socket : Socket
+	var error : Exception // Errore riscontrato durante l'esecuzione
+	var task : AgentTask
+	var forcedClose = false // Variabile che indica se l'interruzione è stata intenzionale
+	
+	/*
+	 * Parametri di inizializzazione:
+	 * 
+	 * - socket per la comunicazione (Socket)
+	 */
+	on Initialize[!occurrence.parameters.empty] {
+		this.socket = occurrence.parameters.get(0) as Socket
+		
+		info("SocketAgent initialized on port " + socket.getPort)
+		
+		val input = new BufferedReader(new InputStreamReader(this.socket.getInputStream))
+		
+		task = task("socket_agent" + socket.getPort + "_task")
+		task.every(20)[
+			try{
+				var received = input.readLine
+				if(received == null || !socket.isConnected || socket.isClosed) {
+					killMe
+				} else {
+					info("Received message on port " + socket.getPort + " : " + received)
+					emit(new MessageFromSocket(received))
+				}
+			} catch(e : IOException) {
+				error("SocketAgent : " + e.toString)
+				this.error = e
+				killMe
+			}	
+		]
+	}
+	
+	on CloseSocketConnection {
+		forcedClose = true
+		killMe
+	}
+	
+	on Destroy {
+		socket.close
+		task.cancel
+		info("Closing connection on port " + socket.getPort)
+		if(!forcedClose) {
+			emit(new NetError(this.error))
+		}
+	}
+	
+	on MessageToSocket {
+		try {
+			val output = socket.outputStream
+			output.write((occurrence.message + '\n').getBytes)
+			output.flush
+		} catch(e : IOException) {
+			error(e.toString)
+		}
+	}
+}

@@ -1,0 +1,14 @@
+package core
+
+/**
+ * @author Gabriele Giunchiele Giunchi
+ * 
+ * Evento lanciato per inviare un messaggio ad un sistema
+ *
+ */
+event MessageToClient extends MessageEvent {
+	
+	new (s : String) {
+		super(s)
+	}
+}

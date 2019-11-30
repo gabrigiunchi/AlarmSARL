@@ -1,0 +1,9 @@
+package boot
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato da ConfigurationAgent quando termina la configurazione dell'applicazione
+ *
+ */
+event ConfigurationDone

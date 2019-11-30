@@ -1,0 +1,20 @@
+package net
+
+import core.MessageEvent
+import java.net.Socket
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato dall'agente SocketAgent quando riceve un messggio dalla socket
+ *
+ */
+event MessageFromSocket extends MessageEvent{
+	
+	val socket : Socket
+	
+	new (s : String, socket : Socket = null) {
+		super(s)
+		this.socket = socket
+	}
+}

@@ -1,0 +1,16 @@
+package io
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato quando viene persa la connessione con Arduino
+ *
+ */
+event DeviceDisconnected {
+	
+	val port : String
+	
+	new (port : String = "") {
+		this.port = port
+	}
+}

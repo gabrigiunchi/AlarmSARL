@@ -1,0 +1,239 @@
+package view
+
+import io.sarl.core.Initialize
+import javax.swing.JFrame
+import java.awt.BorderLayout
+import java.awt.FlowLayout
+import javax.swing.JPanel
+import javax.swing.JLabel
+import java.awt.GridBagLayout
+import java.awt.GridBagConstraints
+import java.time.DayOfWeek
+import javax.swing.JButton
+import javax.swing.JDialog
+import schedule.AlarmScheduleManager
+import java.awt.Dialog
+import schedule.AlarmSchedulePlan
+import java.util.List
+import javax.swing.JComboBox
+import java.util.Vector
+import javax.swing.JTextField
+import javax.swing.JOptionPane
+import javax.swing.BorderFactory
+import java.awt.Window
+import java.awt.Checkbox
+import io.sarl.core.Logging
+import java.time.LocalTime
+import schedule.TimePeriod
+import schedule.ScheduleAction
+import java.time.DateTimeException
+import io.sarl.core.DefaultContextInteractions
+import java.util.Collection
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Dialog per l'aggiunta di nuovi schedule
+ *
+ */
+agent AddScheduleDialog {
+	
+	uses DefaultContextInteractions, Logging
+	
+	/*
+	 * Parametri di inizializzazione
+	 * 
+	 * - finestra padre (Window)
+	 * - collection di id per l'inserimento degli schedule (Collection<String>)
+	 * - giorno della settimana in cui inserire gli schedule, parametro opzionale (String)
+	 */
+	on Initialize {
+		val parent = occurrence.parameters.get(0) as Window
+		val systems = occurrence.parameters.get(1) as Collection<String>
+		var temp : DayOfWeek = null
+		if(occurrence.parameters.size > 2) {
+			temp = occurrence.parameters.get(2) as DayOfWeek
+		}
+		val day = temp
+		
+		val dialog = new JDialog(parent, Dialog.ModalityType.APPLICATION_MODAL)
+		dialog.title = "Add Schedule"
+		dialog.defaultCloseOperation = JFrame.DISPOSE_ON_CLOSE
+		dialog.locationRelativeTo = null
+		dialog.setSize(600, 300)
+		dialog.layout = new BorderLayout
+		val confirm = new JButton("Confirm")
+		val daySelected : boolean = day != null
+		
+		/********************* NORTH **********************/
+		val nord = new JPanel(new FlowLayout)
+		nord.setBorder(BorderFactory.createEmptyBorder(5, 40, 10, 40))
+		val dayList = new JComboBox(new Vector(DayOfWeek.values))
+		
+		if(daySelected) {
+			nord.add(new JLabel(day.name))
+		} else {
+			nord.add(dayList)
+		}
+		
+		/********************* CENTER ***********************/
+		val center = new JPanel(new GridBagLayout)
+		val constraints = new GridBagConstraints
+		constraints.anchor = GridBagConstraints.WEST
+		constraints.gridx = 0
+		constraints.gridy = 0
+		val check2 = new Checkbox("Aggiungi orario di disattivazione")
+		val check1 = new Checkbox("Aggiungi orario di attivazione")
+		
+		// Orario di inizio
+		val panel1 = new JPanel(new FlowLayout)
+		val startHourField = new JTextField(3)
+		val startMinuteField = new JTextField(3)
+		val label1 = new JLabel("Orario di inizio");
+		val label2 = new JLabel(":")
+		check1.addItemListener[
+			confirm.enabled = check1.state || check2.state
+			#[label1, label2, startHourField, startMinuteField].forEach[it.enabled = check1.state]
+		]
+		check1.state = true
+		#[label1, label2, startHourField, startMinuteField].forEach[it.enabled = check1.state]
+		panel1.add(check1)
+		panel1.add(label1)
+		panel1.add(startHourField)
+		panel1.add(label2)
+		panel1.add(startMinuteField)
+		
+		// Orario di fine
+		val panel2 = new JPanel(new FlowLayout)
+		val label3 = new JLabel("Orario di fine")
+		val label4 = new JLabel(":")
+		val finishMinuteField = new JTextField(3)
+		val finishHourField = new JTextField(3)
+		check2.addItemListener[
+			confirm.enabled = check1.state || check2.state
+			#[label3, label4, finishHourField, finishMinuteField].forEach[it.enabled = check2.state]
+		]
+		check2.state = false
+		#[label3, label4, finishHourField, finishMinuteField].forEach[it.enabled = check2.state]
+		
+		panel2.add(check2)
+		panel2.add(label3)
+		panel2.add(finishHourField)
+		panel2.add(label4)
+		panel2.add(finishMinuteField)
+		
+		center.add(panel1, constraints)
+		constraints.gridy++;
+		center.add(panel2, constraints)
+		
+		/********************* SUD  ***********************/
+		val sud = new JPanel(new FlowLayout)
+		sud.border = BorderFactory.createEmptyBorder(5, 40, 10, 40)
+		confirm.enabled = check1.state || check2.state
+		confirm.addActionListener[
+			var h1 = startHourField.text
+			var m1 = startMinuteField.text
+			var h2 = finishHourField.text
+			var m2 = finishMinuteField.text
+			val action1On = check1.state
+			val action2On = check2.state
+		
+			var selectedDay = day
+			if(!daySelected) {
+				selectedDay = dayList.selectedItem as DayOfWeek
+			}
+			
+			if(addSchedule(dialog, systems, #[h1, m1, h2, m2], action1On, action2On, selectedDay)) {
+				emit(new ScheduleAdded)
+				dialog.dispose
+			}
+		]
+		
+		val cancel = new JButton("Cancel")
+		cancel.addActionListener[dialog.dispose]
+		sud.add(confirm)
+		sud.add(cancel)
+		
+		dialog.add(center, BorderLayout.CENTER)
+		dialog.add(sud, BorderLayout.SOUTH)
+		dialog.add(nord, BorderLayout.NORTH)
+		dialog.validate
+		dialog.visible = true
+	}
+	
+	private def addSchedule(dialog : Window, systems : Collection<String>, values : List<String>, 
+		startActionOn : boolean, finishActionOn : boolean, day : DayOfWeek) : boolean {
+		
+			val startHour = values.get(0)
+			val startMinute = values.get(1)
+			val finishHour = values.get(2)
+			val finishMinute = values.get(3)
+			
+			try {
+				// Sono presenti sia l'orario di inizio sia quello di fine
+				if(startActionOn && finishActionOn) {
+					if(startHour.empty || startMinute.empty || finishHour.empty || finishMinute.empty) {
+						JOptionPane.showMessageDialog(dialog, "Non tutti i campi sono completi", "Errore" , 
+							JOptionPane.ERROR_MESSAGE
+						)	
+						return false;
+					}
+					
+					val h1 = Integer.parseInt(startHour)
+					val m1 = Integer.parseInt(startMinute)
+					val h2 = Integer.parseInt(finishHour)
+					val m2 = Integer.parseInt(finishMinute)
+					val period = TimePeriod.between(LocalTime.of(h1, m1), LocalTime.of(h2, m2))
+					systems.forEach[
+						val plan = AlarmSchedulePlan.activationPeriod(it, day, period)
+						AlarmScheduleManager.instance.addSchedule(plan)
+					]
+				} else if(startActionOn) {
+					// Solo l'orario di inizio è presente
+					if(startHour.empty || startMinute.empty) {
+						JOptionPane.showMessageDialog(dialog, "Non tutti i campi sono completi", "Errore" , 
+							JOptionPane.ERROR_MESSAGE
+						)	
+						return false;
+					}
+					val h1 = Integer.parseInt(startHour)
+					val m1 = Integer.parseInt(startMinute)
+					val time = LocalTime.of(h1, m1)
+					systems.forEach[
+						val plan = AlarmSchedulePlan.singleAction(it, day, ScheduleAction.turnOnAction(time))
+						AlarmScheduleManager.instance.addSchedule(plan)
+					]
+					
+				} else if(finishActionOn) {
+					// Solo l'orario di fine è presente
+					if(finishHour.empty || finishMinute.empty) {
+						JOptionPane.showMessageDialog(dialog, "Non tutti i campi sono completi", "Errore" , 
+							JOptionPane.ERROR_MESSAGE
+						)	
+						return false;
+					}
+					val h2 = Integer.parseInt(finishHour)
+					val m2 = Integer.parseInt(finishMinute)
+					val time = LocalTime.of(h2, m2)
+					systems.forEach[
+						val plan = AlarmSchedulePlan.singleAction(it, day, ScheduleAction.turnOffAction(time))
+						AlarmScheduleManager.instance.addSchedule(plan)
+					]
+					
+				}
+
+				info("Inserito correttamente nuovo schedule")
+				return true
+			} catch(e : NumberFormatException) {
+				JOptionPane.showMessageDialog(dialog, "Non hai inserito un numero valido", "Errore" , 
+					JOptionPane.ERROR_MESSAGE
+				)
+			} catch(e : DateTimeException) {
+				JOptionPane.showMessageDialog(dialog, e.getMessage, "Errore",
+					JOptionPane.ERROR_MESSAGE
+				)
+			}
+			
+			return false
+	}
+}

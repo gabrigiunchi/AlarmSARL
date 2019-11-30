@@ -1,0 +1,252 @@
+package view
+
+import io.sarl.core.Initialize
+import javax.swing.JFrame
+import java.awt.BorderLayout
+import java.awt.FlowLayout
+import javax.swing.JPanel
+import javax.swing.JLabel
+import java.awt.GridBagLayout
+import java.awt.GridBagConstraints
+import java.time.DayOfWeek
+import javax.swing.JButton
+import javax.swing.JDialog
+import schedule.AlarmScheduleManager
+import java.awt.Dialog
+import schedule.AlarmSchedulePlan
+import java.util.List
+import java.util.stream.Collectors;
+import javax.swing.BorderFactory
+import model.SystemDetail
+import io.sarl.core.Schedules
+import io.sarl.core.Lifecycle
+import io.sarl.core.Logging
+import schedule.ScheduleAction
+import java.util.TreeSet
+import schedule.ScheduleActionType
+import io.sarl.core.DefaultContextInteractions
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * View per gestire gli schedule degli allarmi di un sistema
+ *
+ */
+agent ScheduleView {
+	
+	uses Schedules, Lifecycle, Logging, DefaultContextInteractions
+	
+	var frame : JFrame
+	var scheduleDialog : JDialog
+	var selectedDay : DayOfWeek
+	
+	var systemDetail : SystemDetail
+	var list : List<AlarmSchedulePlan>
+	
+	/*
+	 * Parametri di inizializzazione:
+	 * 
+	 * - oggetto SystemDetail del sistema di cui si vogliono visualizzare i dettagli
+	 */
+	on Initialize[!occurrence.parameters.empty] {
+		systemDetail = occurrence.parameters.get(0) as SystemDetail
+		list = AlarmScheduleManager.instance.getSchedulesForSystem(systemDetail.id)
+		
+		frame = new JFrame
+		frame.defaultCloseOperation = JFrame.DISPOSE_ON_CLOSE
+		
+		// Il titolo del frame contiene l'id o il nome del sistema 
+		if(systemDetail.name.empty) {
+			frame.title = "Schedules of " + systemDetail.id
+		} else {
+			frame.title = "Schedules of " + systemDetail.name
+		}
+		
+		frame.locationRelativeTo = null
+		frame.layout = new BorderLayout
+		refreshMainView
+		frame.visible = true
+		
+		/*
+		 * Task per distruggere l'agent in caso la view sia stata chiusa
+		 */
+		in(1000)[every(500,[
+			if(!frame.displayable) {
+				info("Destroying ScheduleView...")
+				killMe
+			}
+		])]
+		
+		info("ScheduleView initialized")
+	}
+	
+	on ScheduleAdded {
+		refreshMainView
+		if(scheduleDialog != null) {
+			refreshScheduleDialog
+		}
+	}
+	
+	/*
+	 * Aggiorna la view che mostra i giorni della settimana da poter selezionare
+	 */
+	private def refreshMainView {
+		frame.contentPane.removeAll
+		
+		/*********************** NORTH *******************************/
+		val north = new JPanel(new FlowLayout)
+		north.setBorder(BorderFactory.createEmptyBorder(5, 40, 20, 40))
+		
+		if(systemDetail.name.empty) {
+			north.add(new JLabel("Schedules of: " + systemDetail.id))
+		} else {
+			north.add(new JLabel("Schedules of: " + systemDetail.name))
+		}
+		
+		/*********************** CENTER ******************************/
+		val center = new JPanel(new GridBagLayout)
+	
+		val constraints = new GridBagConstraints
+		constraints.anchor = GridBagConstraints.WEST
+		constraints.gridx = 0
+		constraints.gridy = 0
+		
+		/*
+		 * Parte centrale della view dove per ogni giorno della settimana
+		 * viene mostrato un bottone che rimanda alla pagina di riepilogo degli schedule per quel giorno
+		 */
+		DayOfWeek.values.forEach[
+			val day = it
+			val panel = new JPanel(new FlowLayout)
+			
+			val manageButton = new JButton("Manage")
+			manageButton.addActionListener[createScheduleDialog(day)]
+			
+			val dayOfWeekLabel = new JLabel(it.name)
+			dayOfWeekLabel.border = BorderFactory.createEmptyBorder(0, 0, 0, 20)
+			
+			panel.add(dayOfWeekLabel)
+			panel.add(manageButton)
+			panel.add(new JLabel(list.stream.filter[it.day.equals(day)].count.toString))
+			
+			center.add(panel, constraints)
+			constraints.gridy++
+		]
+		
+		/********************* SOUTH *******************/
+		val south = new JPanel(new FlowLayout)
+		south.setBorder(BorderFactory.createEmptyBorder(20, 150, 20, 150))
+		// Bottone per aggiungere schedule
+		val addScheduleButton = new JButton("Add Schedule")
+		addScheduleButton.addActionListener[spawn(AddScheduleDialog, frame, #[systemDetail.id])]
+		south.add(addScheduleButton)
+		
+		frame.add(north, BorderLayout.NORTH)
+		frame.add(center, BorderLayout.CENTER)
+		frame.add(south, BorderLayout.SOUTH)
+		
+		frame.pack
+		frame.validate
+	}
+	
+	/*
+	 * Crea il dialog dove è possibile vedere la lista di schedule del giorno selezionato
+	 */
+	private def createScheduleDialog(day : DayOfWeek) {
+		scheduleDialog = new JDialog(frame, Dialog.ModalityType.APPLICATION_MODAL)
+		scheduleDialog.defaultCloseOperation = JFrame.DISPOSE_ON_CLOSE
+		scheduleDialog.locationRelativeTo = null
+		scheduleDialog.setSize(400, 200)
+		scheduleDialog.layout = new BorderLayout
+		scheduleDialog.title = "Schedules of " + day.name
+		
+		selectedDay = day
+		
+		refreshScheduleDialog
+		scheduleDialog.setVisible(true)
+	}
+	
+	/*
+	 * Aggiorna la vista della lista di schedule del giorno selezionato
+	 */
+	private def refreshScheduleDialog {
+		scheduleDialog.contentPane.removeAll
+		
+		/***************** WEST ******************************/
+		val west = new JPanel(new GridBagLayout)
+		val constraints = new GridBagConstraints
+		constraints.anchor = GridBagConstraints.WEST
+		constraints.gridx = 0
+		constraints.gridy = 0
+		
+		/*
+		 * Parte centrale del panel dove viene mostrata la lista di schedule del giorno selezionato
+		 */
+		list.stream.filter[it.day.equals(selectedDay)].forEach[
+			val schedule = it
+			val rowPanel = new JPanel(new FlowLayout)
+			rowPanel.border = BorderFactory.createEmptyBorder(5, 10, 0, 30)
+			
+			// Rappresentazione testuale dello schedule
+			val stringBuilder = new StringBuilder()
+			// Ordino le actions relative allo schedule per avere l'orario di attivazione come primo elemento del set
+			val actions = new TreeSet<ScheduleAction>([a1, a2 | a1.time.compareTo(a2.time)])
+			actions.addAll(it.actions)
+			val iterator = actions.iterator
+			
+			/*
+			 *	Se lo schedule contiene due action il risultato è
+			 *  ON hh:mm -> OFF hh:mm
+			 * 
+			 * 	Altrimenti <TYPE> hh:mm dove <TYPE> contiene il tipo di azione (turn_on o turn_off)
+			 */
+			for(var i = 0; i < it.actions.size; i++) {
+				if(i > 0) {
+					stringBuilder.append(" -> ")
+				}
+				
+				val action = iterator.next
+				var typeName = "ON";
+				if(action.type == ScheduleActionType.turn_off) {
+					typeName = "OFF"
+				} 
+				stringBuilder.append(typeName).append(' ').append(action.time.toString)
+			}
+			val label = new JLabel(stringBuilder.toString)
+			rowPanel.add(label)
+			
+			// Bottone per rimuovere lo schedule
+			val remove = new JButton("Remove")
+			remove.addActionListener[
+				list -= schedule
+				scheduleDialog.contentPane.removeAll
+				refreshScheduleDialog
+				refreshMainView
+				info("Rimosso con successo schedule")
+			]
+			
+			rowPanel.add(remove)
+			west.add(rowPanel, constraints)
+			constraints.gridy++
+		]
+		
+		/********************** SUD *****************************/
+		val sud = new JPanel(new FlowLayout)
+		sud.border = BorderFactory.createEmptyBorder(30, 20, 5, 20)
+		val addButton = new JButton("Add Schedule")
+		//addButton.addActionListener[createAddScheduleDialog(scheduleDialog, selectedDay)]
+		addButton.addActionListener[spawn(AddScheduleDialog, systemDetail.id, scheduleDialog, selectedDay)]
+		sud.add(addButton)
+		
+		/******************** NORTH *****************************/
+		val north = new JPanel(new FlowLayout)
+		north.add(new JLabel(scheduleDialog.title))
+		north.border = BorderFactory.createEmptyBorder(10, 100, 20, 100)
+		
+		scheduleDialog.contentPane.add(north, BorderLayout.NORTH)
+		scheduleDialog.contentPane.add(west, BorderLayout.WEST)
+		scheduleDialog.contentPane.add(sud, BorderLayout.SOUTH)
+		scheduleDialog.pack
+		scheduleDialog.validate
+	}
+}

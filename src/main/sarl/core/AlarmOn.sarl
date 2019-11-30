@@ -1,0 +1,18 @@
+package core
+
+import model.SystemDetail
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato dall'agente SystemAgent quando rileva l'attivazione di un allarme
+ *
+ */
+event AlarmOn {
+	
+	val systemId : SystemDetail
+	
+	new(detail : SystemDetail) {
+		this.systemId = detail
+	}
+}

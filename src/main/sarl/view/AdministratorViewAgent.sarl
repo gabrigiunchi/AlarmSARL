@@ -1,0 +1,135 @@
+package view
+
+import io.sarl.core.Initialize
+import javax.swing.JFrame
+import java.awt.BorderLayout
+import javax.swing.JPanel
+import java.awt.GridBagLayout
+import java.awt.GridBagConstraints
+import javax.swing.BorderFactory
+import java.awt.Insets
+import java.awt.FlowLayout
+import javax.swing.JButton
+import javax.swing.JLabel
+import io.sarl.core.DefaultContextInteractions
+import core.SetSystemEnabled
+import static utilities.Utilities.getStateDescriptionForState
+import static utilities.Utilities.getSystems
+import static utilities.Utilities.getImageBySystemState
+import io.sarl.core.Schedules
+import io.sarl.core.Lifecycle
+import io.sarl.core.Logging
+import java.util.stream.Collectors;
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Schermata principale dell'applicazione che mostra la lista dei sistemi connessi
+ *
+ */
+agent AdministratorViewAgent {
+	
+	uses DefaultContextInteractions, Schedules, Lifecycle, Logging
+	
+	val frame = new JFrame
+	val listPanel = new JPanel(new GridBagLayout)
+	val manage = new JButton("Manage systems")
+	val addSchedule = new JButton("Add Schedule")
+	val turnOnAll = new JButton("Turn on all")
+	val turnOffAll = new JButton("Turn off all")
+	val label = new JLabel("There aren't connected devices")
+	
+	on Initialize {
+		frame.title = "Administrator View"
+		frame.defaultCloseOperation = JFrame.DISPOSE_ON_CLOSE
+		frame.setSize(600, 300)
+		frame.locationRelativeTo = null
+		frame.contentPane.layout = new BorderLayout
+		
+		val west = new JPanel(new BorderLayout)
+		frame.getContentPane.add(west, BorderLayout.WEST)
+		west.add(listPanel, BorderLayout.NORTH)
+		west.setBorder(BorderFactory.createEmptyBorder(40, 0, 0,0))
+		
+		turnOnAll.addActionListener[emit(new SetSystemEnabled(true))]
+		turnOffAll.addActionListener[emit(new SetSystemEnabled(false))]
+		manage.addActionListener[spawn(DetailView)]
+		
+		val nordPanel = new JPanel(new FlowLayout)
+		nordPanel.add(label)
+		nordPanel.add(turnOnAll)
+		nordPanel.add(turnOffAll)
+		nordPanel.add(manage)
+		val systemIds = systems.values().stream().map[it.id].collect(Collectors.toList);
+		addSchedule.addActionListener[spawn(AddScheduleDialog, frame, systemIds)]
+		nordPanel.add(addSchedule)
+		frame.contentPane.add(nordPanel, BorderLayout.NORTH)
+		
+		this.updateView
+		
+		frame.validate
+		frame.visible = true
+		
+		/*
+		 * Task per distruggere l'agente quando la view è stata chiusa
+		 */
+		in(1000)[every(50,[
+			if(!frame.displayable) {
+				info("Destroying AdministratorViewAgent...")
+				killMe
+			}
+		])]
+	}
+	
+	on UpdateView {
+		this.updateView
+	}
+	
+	private def updateView {
+		listPanel.removeAll
+		
+		val constraints = new GridBagConstraints
+		constraints.anchor = GridBagConstraints.WEST
+		constraints.insets = new Insets(5, 5, 0, 0)
+		constraints.gridx = 0
+		constraints.gridy = 0
+		
+		if(systems.empty) {
+			#[turnOnAll, turnOffAll, addSchedule, manage].forEach[it.setVisible(false)]
+			label.visible = true
+		} else {
+			#[turnOnAll, turnOffAll, manage, addSchedule].forEach[it.setVisible(true)]
+			label.visible = false
+		}
+		
+		// Parte centrale con la lista di sistemi
+		systems.keySet.forEach[
+			val details = systems.get(it)
+			var id : String = it.toString
+			
+			// Mostro il nome del sistema, se presente, altrimenti l'id
+			if(!details.name.empty) {
+				id = details.name
+			} else if(!details.id.empty) {
+				id = details.id
+			}
+			var idLabel = new JLabel(id)
+			
+			// Icona di stato
+			val state = details.state
+			var stateLabel = new JLabel(getStateDescriptionForState(state))
+			var icon = new JLabel("", getImageBySystemState(state), JLabel.CENTER)
+			
+			var row = new JPanel(new FlowLayout)
+			
+			row.add(idLabel)
+			row.add(stateLabel)
+			row.add(icon)
+			listPanel.add(row, constraints)
+			
+			constraints.gridy++
+		]
+	
+		frame.revalidate
+	}
+}

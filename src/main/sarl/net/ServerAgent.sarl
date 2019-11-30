@@ -1,0 +1,54 @@
+package net
+
+import io.sarl.core.Initialize
+import java.net.ServerSocket
+import io.sarl.core.Logging
+import java.net.Socket
+import io.sarl.core.DefaultContextInteractions
+import core.SystemAgent
+import io.sarl.core.Destroy
+import java.io.IOException
+import io.sarl.core.Schedules
+import io.sarl.core.Lifecycle
+import static model.ApplicationProtocols.SERVER_PORT
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Agente che implementa il server dell'applicazione.
+ *
+ */
+agent ServerAgent {
+	
+	uses Logging, DefaultContextInteractions, Schedules, Lifecycle
+
+	var count = 0
+	var server : ServerSocket
+	val task = task("server_agent_task")
+	
+	on Initialize{
+		server = new ServerSocket(SERVER_PORT);
+		info("Server listening on port " + SERVER_PORT);
+		
+		// Task periodico in cui si accettano nuove richieste di connessione
+		task.every(20)[
+			try {
+				val socket : Socket = server.accept();
+				count++
+				spawn(SystemAgent, socket, count)	
+			} catch(e : IOException) { 
+				info("ServerAgent: " + e.getMessage)
+			}	
+		]
+	}
+	
+	on CloseServer {
+		killMe
+	}
+	
+	on Destroy {
+		task.cancel
+		server.close
+		info("Shutting down server...")
+	}
+}

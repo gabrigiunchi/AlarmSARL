@@ -1,0 +1,32 @@
+package console
+
+import console.ConsoleHandlerCapacity
+import utilities.UserSettings
+import io.sarl.core.DefaultContextInteractions
+import io.sarl.core.Logging
+import view.PasswordCorrect
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Console handler che controlla l'inserimento della password
+ * per poter accedere all'applicazione
+ *
+ */
+skill LoginConsoleHandler implements ConsoleHandlerCapacity {
+	
+	uses DefaultContextInteractions, Logging
+	
+	override install {
+		super.install
+		info("Inserisci la password: ")
+	}
+
+	override handleConsoleMessage(s : String) {
+		if(s.equals(UserSettings.password)) {
+			emit(new PasswordCorrect)
+		} else {
+			info("Password errata")
+		}
+	}
+}

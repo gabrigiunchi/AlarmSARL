@@ -1,0 +1,12 @@
+package console
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Capacity per gestire gli input dell'utente sulla linea di comando.
+ *
+ */
+capacity ConsoleHandlerCapacity {
+	
+	def handleConsoleMessage(s : String)
+}

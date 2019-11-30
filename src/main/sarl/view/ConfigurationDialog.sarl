@@ -1,0 +1,98 @@
+package view
+
+import java.awt.BorderLayout;
+import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import io.sarl.core.Initialize
+import boot.PasswordSet
+import io.sarl.core.DefaultContextInteractions
+import boot.ConfigurationDone
+import io.sarl.core.Lifecycle
+import io.sarl.core.Destroy
+import io.sarl.core.Logging
+import javax.swing.BorderFactory
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * View per la configurazione dell'applicazione quando l'utente la utilizza per la prima volta
+ * Contiene due campi per l'inserimento della nuova password dell'applicazione
+ *
+ */
+agent ConfigurationDialog {
+	
+	uses DefaultContextInteractions, Lifecycle, Logging
+	
+	val frame = new JFrame
+	
+	on Initialize {
+		frame.contentPane.layout = new BorderLayout
+		frame.defaultCloseOperation = JFrame.EXIT_ON_CLOSE
+		frame.locationRelativeTo = null
+		frame.title = "Inserisci la password dell'applicazione"
+		
+		val nord = new JPanel(new GridBagLayout)
+		val constraints = new GridBagConstraints
+		constraints.gridx = 0
+		constraints.gridy = 0
+		constraints.insets = new Insets(10, 10, 10, 10)
+		
+		val passwordField1 = new JPasswordField(20)
+		val passwordField2 = new JPasswordField(20)
+		val label1 = new JLabel("Inserisci la password")
+		val label2 = new JLabel("Inserisci nuovamente la password")
+		
+		val panel1 = new JPanel(new FlowLayout)
+		val panel2 = new JPanel(new FlowLayout)
+		panel1.add(label1)
+		panel1.add(passwordField1)
+		panel2.add(label2)
+		panel2.add(passwordField2)
+		
+		nord.add(panel1, constraints)
+		constraints.gridy++
+		nord.add(panel2, constraints)
+		
+		val sud = new JPanel(new FlowLayout)
+		sud.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 0))
+		val okButton = new JButton("Confirm")
+		okButton.addActionListener[
+			val p1 = new String(passwordField1.getPassword)
+			val p2 = new String(passwordField2.getPassword)
+			if(!p1.empty && p1.equals(p2)) {
+				emit(new PasswordSet(p1))
+				frame.dispose
+				killMe
+			} else {
+				JOptionPane.showMessageDialog(frame, "Le due password non coincidono", "Errore", 
+					JOptionPane.ERROR_MESSAGE
+				)
+			}
+		]	
+		sud.add(okButton)
+		
+		frame.add(nord, BorderLayout.NORTH)
+		frame.add(sud, BorderLayout.SOUTH)
+		
+		frame.pack
+		frame.validate
+		frame.visible = true
+	}
+	
+	on ConfigurationDone {
+		frame.dispose
+		killMe
+	}
+	
+	on Destroy {
+		info("Destroying ConfigurationDialog...")
+	}
+}

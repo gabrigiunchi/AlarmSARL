@@ -1,0 +1,9 @@
+package io
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato per chiudere la connessione con Arduino
+ *
+ */
+event CloseConnectionWithDevice

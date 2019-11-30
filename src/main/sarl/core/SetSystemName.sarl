@@ -1,0 +1,16 @@
+package core
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento che serve per settare il nome di un sistema
+ *
+ */
+event SetSystemName {
+	
+	val name : String
+	
+	new(n : String) {
+		this.name = n
+	}
+}

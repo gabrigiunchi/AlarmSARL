@@ -1,0 +1,50 @@
+package boot
+
+import io.sarl.core.Initialize
+import io.sarl.core.DefaultContextInteractions
+import console.ConsoleReader
+import io.sarl.core.Lifecycle
+import net.ServerAgent
+import core.Controller
+import io.sarl.core.Logging
+import view.InsertPasswordDialog
+import view.PasswordCorrect
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Classe di boot dell'applicazione
+ *
+ */
+agent BootAgent {
+	
+	uses DefaultContextInteractions, Lifecycle, Logging
+	
+	var showGUI : boolean = true
+	
+	on Initialize {
+		if(!occurrence.parameters.isEmpty) {
+			showGUI = Boolean::parseBoolean(occurrence.parameters.get(0) as String)
+		}
+		
+		spawn(ConsoleReader)
+		spawn(ConfigurationAgent, showGUI)
+	}
+
+	on ConfigurationDone {
+		if(showGUI) {
+			spawn(InsertPasswordDialog)
+		}
+	}
+	
+	on PasswordCorrect {
+		spawn(Controller)
+		spawn(ServerAgent)
+		if(showGUI) {
+			spawn(view.AdministratorViewAgent)	
+		}
+		
+		info("Destroying BootAgent")
+		killMe
+	}
+}

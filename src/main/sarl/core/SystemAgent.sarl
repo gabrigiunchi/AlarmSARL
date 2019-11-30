@@ -1,0 +1,193 @@
+package core
+
+import java.util.UUID
+import io.sarl.core.Initialize
+import java.net.Socket
+import io.sarl.core.InnerContextAccess
+import io.sarl.core.Lifecycle
+import io.sarl.core.Logging
+import io.sarl.core.DefaultContextInteractions
+import net.SocketAgent
+import net.NetError
+import net.MessageToSocket
+import net.MessageFromSocket
+import io.sarl.core.Behaviors
+import io.sarl.core.Schedules
+import static model.ApplicationProtocols.STATE_REQUEST
+import static model.ApplicationProtocols.STATE_RESPONSE
+import static model.ApplicationProtocols.TURN_ALARM_OFF
+import io.sarl.core.Destroy
+import model.SystemDetail.SystemState
+import model.SystemDetail
+import model.SystemDetailImpl
+import static model.ApplicationProtocols.TURN_SYSTEM_ON
+import static model.ApplicationProtocols.TURN_SYSTEM_OFF
+import static model.ApplicationProtocols.ID_REQUEST
+import static model.ApplicationProtocols.ID_RESPONSE
+import io.sarl.util.OpenEventSpaceSpecification
+import io.sarl.util.OpenEventSpace
+
+/**
+ * @author Gabriele Giunchi
+ *
+ * Agente che si occupa di gestire la comunicazione con un allarme.
+ * Invia eventi di notifica quando alcuni suoi parametri (id, stato) cambiano
+ * 
+ */
+agent SystemAgent {
+	
+	uses InnerContextAccess, Lifecycle, Logging, DefaultContextInteractions, Behaviors, Schedules
+	
+	var space : OpenEventSpace // Spazio in cui interagire con SchedulerMonitorAgent
+	var socket : Socket
+	var details : SystemDetail // Dettagli del sistema come id completo, nome ecc
+	
+	/*
+	 * id più corto per identificare il sistema. 
+	 * Usato per le operazioni da linea di comando poichè l'id completo è una stringa di 32 caratteri
+	 * Inoltre viene usato come id di logging e come chiave per la map<Integer, SystemDetail>
+	 */
+	var key : int = -1 
+	
+	/*
+	 * Parametri di inizializzazione:
+	 * 
+	 * - socket per la comunicazione internet (Socket)
+	 * - key dell'agente per il loggin e le operazioni da console (Integer)
+	 */
+	on Initialize[!occurrence.parameters.empty] {
+		this.socket = occurrence.parameters.get(0) as Socket
+		this.details = new SystemDetailImpl(getID)
+		this.key = occurrence.parameters.get(1) as Integer
+		
+		systemLog("Initialized")
+		
+		spawnInContext(SocketAgent, innerContext, socket)
+		new SystemConnected(this.key, this.details).emit
+		
+		// Chiedo ad Arduino il suo id e il suo stato
+		in(3000)[
+			wake(new MessageToSocket(prepareMessageWithCode(ID_REQUEST)))
+			wake(new MessageToSocket(prepareMessageWithCode(STATE_REQUEST)))
+		]
+	}
+
+	on MessageToClient {
+		systemLog("Invio messaggio a client")
+
+		// Equivalente a innerContext.defaultSpace.emit(new MessageToSocket(occurrence.message))
+		wake(new MessageToSocket(occurrence.message))
+	}
+	
+	on SetSystemEnabled {
+		val state = occurrence.enabled
+		var code = TURN_SYSTEM_OFF
+		
+		if(state == true) {
+			code = TURN_SYSTEM_ON
+		}
+		
+		wake(new MessageToSocket(prepareMessageWithCode(code)))
+	}
+	
+	on TurnAlarmOff {
+		info("Mando comando per stoppare allarme")
+		wake(new MessageToSocket(prepareMessageWithCode(TURN_ALARM_OFF)))
+	}
+	
+	on SetSystemName {
+		details.name = occurrence.name
+		systemLog("Cambiato nome in '" + occurrence.name + "'")
+		emit(new SystemDetailsUpdated(details))
+	}
+	
+	on MessageFromSocket {
+		val code = occurrence.message.charAt(0) as int
+		
+		/*
+		 * Handles the received message considering the code of the event
+		 */
+		switch code {
+			case STATE_RESPONSE : {
+				val state = occurrence.message.charAt(1) as int
+				this.details.state = SystemState.getStateById(state)
+				
+				switch(details.getState) {
+					case calibrating : systemLog("System is calibrating")
+					case ^on : systemLog("System is on")	
+					case off: systemLog("System is off")
+					case alarm : {
+						systemLog("System is in alarm state")	
+						emit(new AlarmOn(details))	
+					}
+					
+					default : systemLog("Error in state response, received state code " + state)
+				}
+			
+				emit(new SystemDetailsUpdated(details))
+			}
+			
+			case ID_RESPONSE : {
+				details.id = occurrence.message.substring(1)
+				systemLog("Changed system id in '" + details.id + "'")
+				createSchedulerMonitorAgent
+				new SystemDetailsUpdated(this.details).emit
+			}
+			
+			default : systemLog("Received message : " + occurrence.message)
+		}
+	}
+	
+	on NetError {
+		// Se space != null allora mando l'evento
+		space?.emit(occurrence)
+		killMe
+	}
+	
+	on Destroy {
+		info("Destroying SystemAgent " + key + "....")
+		emit(new SystemDisconnected(this.key))
+	}
+	
+	private def createSchedulerMonitorAgent {
+		// Creo uno Space dove potere comunicare con ScheduleMonitorAgent
+		val spaceUUID = UUID::randomUUID
+		space = defaultContext.getOrCreateSpaceWithID(spaceUUID, typeof(OpenEventSpaceSpecification))
+		space.register(asEventListener)
+		
+		// Creo l'agente ScheduleMonitorAgent passando i parametri necessari
+		spawn(ScheduleMonitorAgent, this.details.id, spaceUUID)
+	}
+	
+	/*
+	 * Semplifica l'operazione di logging aggiungendo l'id del sistema 
+	 * prima del messaggio da stampare
+	 */
+	private def systemLog(message : String) {
+		/*
+		 * Costruisco la stringa di logging composta come:
+		 * 
+		 * 'System <ID> -> <message>'
+		 *
+		 */
+		val stringBuilder = new StringBuilder("System ")
+		stringBuilder.append(this.key.toString)
+		if(!details.name.empty) {
+			stringBuilder.append('(')
+				.append(details.name)
+				.append(')')
+		}
+		stringBuilder.append(" -> ")
+			.append(message)
+		
+		info(stringBuilder.toString)
+	}
+	
+	/*
+	 * Costruisce una stringa il cui primo byte è un numero intero
+	 * che rappresenta il codice del messaggio
+	 */
+	def prepareMessageWithCode(code : int, optionalData : String = "") : String {
+		return new StringBuilder(new String(#[code as char])).append(optionalData).toString
+	}
+}

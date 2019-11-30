@@ -1,0 +1,18 @@
+package core
+
+import model.SystemDetail
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato da SystemAgent per notificare che ha aggiornato uno dei suoi attributi
+ *
+ */
+event SystemDetailsUpdated {
+	
+	val systemDetails : SystemDetail
+	
+	new (s : SystemDetail) {
+		this.systemDetails = s
+	}
+}

@@ -1,0 +1,15 @@
+package core
+
+/**
+ * @author Gabriele Giunchi
+ *
+ * Rappresenta un evento in cui è coinvolto un messaggio, sia ricevuto che inviato
+ */
+event MessageEvent {
+	
+	val message : String 
+	
+	new (s : String) {
+		this.message = s
+	}
+}

@@ -1,0 +1,22 @@
+package core
+
+import model.SystemDetail
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato da SystemAgent quando completa la sua inizializzazione.
+ * Serve per aggiornare gli altri agenti dell'avvenuta connessione di un nuovo sistema
+ *
+ */
+event SystemConnected {
+	
+	val systemDetails : SystemDetail
+	val key : int
+	
+	new (key : int, s : SystemDetail) {
+		this.systemDetails = s
+		this.key = key
+	}
+	
+}

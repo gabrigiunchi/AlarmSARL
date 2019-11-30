@@ -1,0 +1,18 @@
+package console
+
+import model.ConsoleHandlerType
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato per comunicare l'intenzione di cambiare sezione della linea di comando
+ *
+ */
+event SwitchConsoleHandler {
+	
+	val type : ConsoleHandlerType
+	
+	new (t : ConsoleHandlerType) {
+		this.type = t
+	}
+}

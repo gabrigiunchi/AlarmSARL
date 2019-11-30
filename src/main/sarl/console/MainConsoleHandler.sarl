@@ -1,0 +1,49 @@
+/**
+ * 
+ */
+package console
+
+import console.ConsoleHandlerCapacity
+import model.ConsoleHandlerType
+import io.sarl.core.DefaultContextInteractions
+import static model.ConsoleCommands.MainCommandsCode.help
+import static model.ConsoleCommands.MainCommandsCode.net
+import static model.ConsoleCommands.MainCommandsCode.io
+import static model.ConsoleCommands.MainCommandsCode.open_gui
+import io.sarl.core.Logging
+import view.AdministratorViewAgent
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Skill per la gestione della sezione principale della linea di comando
+ *
+ */
+skill MainConsoleHandler implements ConsoleHandlerCapacity {
+	
+	uses DefaultContextInteractions, Logging
+	
+	override install {
+		super.install
+		info("Welcome to main section")
+	}
+	
+	override handleConsoleMessage(s : String) {
+		switch s {
+			case net : owner.ID.receive(new SwitchConsoleHandler(ConsoleHandlerType.net))
+			case io : owner.ID.receive(new SwitchConsoleHandler(ConsoleHandlerType.io))
+			case help : showCommandsList
+			case open_gui: spawn(AdministratorViewAgent)
+			default : info("Command not found")
+		}
+	}
+	
+	private def showCommandsList {
+		val stringBuilder = new StringBuilder("\n\nAvailable commands: \n")
+		stringBuilder.append("\n" + open_gui + " - Open graphic interface");
+		stringBuilder.append("\n" + net + " - Go to net section");
+		stringBuilder.append("\n" + io + " - Go to io section");
+		stringBuilder.append("\n")
+		info(stringBuilder.toString)
+	}
+}

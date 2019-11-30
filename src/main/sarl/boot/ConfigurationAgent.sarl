@@ -1,0 +1,46 @@
+package boot
+
+import io.sarl.core.Initialize
+import io.sarl.core.DefaultContextInteractions
+import utilities.UserSettings
+import io.sarl.core.Lifecycle
+import view.ConfigurationDialog
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Agente che si occupa della configurazione dell'applicazione.
+ * La prima volta che l'applicazione è usata viene chiesto all'utente di inserire una password
+ * che verrà utilizzata per impedire accessi non autorizzati
+ *
+ */
+agent ConfigurationAgent {
+	
+	uses DefaultContextInteractions, Lifecycle
+	
+	on Initialize {
+		var showGUI = true
+		if(!occurrence.parameters.isEmpty) {
+			showGUI = occurrence.parameters.get(0) as Boolean
+		}
+		
+		val needInstallation = UserSettings.needInstallation
+		
+		// Se bisogna configurare l'applicazione e si deve mostrare l'interfaccia grafica
+		if(needInstallation && showGUI) {
+			spawn(ConfigurationDialog)
+		} else if(!needInstallation) {
+			// Configurazione già effettuata
+			UserSettings.loadSettings
+			emit(new ConfigurationDone)
+			killMe
+		}
+	}
+	
+	// Password settata dall'interfaccia grafica o da linea di comando
+	on PasswordSet {
+		emit(new ConfigurationDone)
+		UserSettings.configureApplication(occurrence.password)
+		killMe
+	}
+}

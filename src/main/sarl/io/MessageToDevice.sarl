@@ -1,0 +1,16 @@
+package io
+
+import core.MessageEvent
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato per inviare un messaggio al dispositivo Arduino
+ *
+ */
+event MessageToDevice extends MessageEvent {
+
+	new(s : String) {
+		super(s)
+	}
+}

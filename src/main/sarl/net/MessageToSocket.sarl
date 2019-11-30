@@ -1,0 +1,17 @@
+package net
+
+import core.MessageEvent
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato per inviare un messaggio attraverso la socket.
+ * E' gestito dall'agente SocketAgent
+ *
+ */
+event MessageToSocket extends MessageEvent {
+	
+	new (s : String) {
+		super(s)
+	}
+}

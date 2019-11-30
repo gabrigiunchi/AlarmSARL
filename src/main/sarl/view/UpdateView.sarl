@@ -1,0 +1,12 @@
+package view
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento lanciato quando la GUI deve essere aggiornata.
+ * Questo evento è gestito solo da AdministratorViewAgent poichè DetailView 
+ * è creato nell'innerContext di AdministratorViewAgent. 
+ * L'evento per agggiornare DetailView è UpdateDetailView
+ *
+ */
+event UpdateView

@@ -1,0 +1,154 @@
+package console
+
+import io.sarl.core.DefaultContextInteractions
+import core.MessageToClient
+import io.sarl.core.Logging
+import model.ConsoleHandlerType
+import core.SetSystemName
+import static model.ConsoleCommands.SystemCommandsCode.send_broadcast
+import static model.ConsoleCommands.SystemCommandsCode.send_to
+import static model.ConsoleCommands.SystemCommandsCode.help
+import static model.ConsoleCommands.SystemCommandsCode.back
+import static model.ConsoleCommands.SystemCommandsCode.list
+import static model.ConsoleCommands.SystemCommandsCode.set_name
+import static model.ConsoleCommands.SystemCommandsCode.set_on
+import static model.ConsoleCommands.SystemCommandsCode.set_off
+import static model.ConsoleCommands.SystemCommandsCode.detail
+import static model.ConsoleCommands.SystemCommandsCode.stop_alarm
+import core.SetSystemEnabled
+import static utilities.Utilities.getSystems
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import core.TurnAlarmOff
+import utilities.UserSettings
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * ConsoleHandler che mette a disposizione i comandi per comunicare con i sistemi connessi
+ *
+ */
+skill SystemCommunicationConsoleHandler implements ConsoleHandlerCapacity {
+
+	uses DefaultContextInteractions, Logging
+	
+	override install {
+		super.install
+		info("Welcome to net section")
+	}
+
+	override handleConsoleMessage(s : String) {
+		val line = s
+		val values : String[] = line.split(" ")
+		val command : String = values.get(0).toLowerCase
+		
+		try {
+			switch command {
+				case send_broadcast : new MessageToClient(line.split(" ", 2).get(1)).emit
+				
+				case send_to : {
+					val destination = Integer.parseInt(values.get(1))
+					val message = line.split(" ", 3).get(2)
+					systems.get(destination).agentId.receive(new MessageToClient(message))
+				}
+				
+				case set_on : {
+					if(values.length > 1) {
+						val destination = Integer.parseInt(values.get(1))
+						systems.get(destination).agentId.receive(new SetSystemEnabled(true))
+					} else {
+						emit(new SetSystemEnabled(true))
+					}
+				}
+				
+				case set_off : {
+					if(values.length > 1) {
+						val destination = Integer.parseInt(values.get(1))
+						systems.get(destination).agentId.receive(new SetSystemEnabled(false))
+					} else {
+						emit(new SetSystemEnabled(false))
+					}
+				}
+				
+				case set_name : {
+					val destination = Integer.parseInt(values.get(1))
+					val name = values.get(2)
+					systems.get(destination).agentId.receive(new SetSystemName(name))
+				}
+				
+				case detail : {
+					val destination = Integer.parseInt(values.get(1))
+					val details = systems.get(destination)
+					info(details.toString)
+				}
+				
+				case stop_alarm : {
+					val destination = Integer.parseInt(values.get(1))
+					info("Insert password : ")
+					val console = new BufferedReader(new InputStreamReader(System.in))
+					val password = console.readLine
+					if(password.equals(UserSettings.password)) {
+						info("Password correct")
+						systems.get(destination).agentId.receive(new TurnAlarmOff)
+					} else {
+						info("Password not correct")
+					}
+				}
+				
+				case list : showSystemsList
+				case back: new SwitchConsoleHandler(ConsoleHandlerType.main).emit
+				case help : showCommandsList
+				default : info("Command not found")
+			}
+		} catch(e : NumberFormatException) {
+			info("Error parsing arguments")
+		} catch(e : IndexOutOfBoundsException) {
+			info("Some arguments are missing")
+		} catch(e : NullPointerException) {
+			info("There isn't any system with that id")
+		}
+	}	
+	
+	private def showSystemsList {
+		if(list.isEmpty) {
+			info("There are no connected systems")
+		} else {
+			val stringBuilder = new StringBuilder('\n')
+
+			// Creo la stringa che contiene la lista dei sistemi connessi
+			systems.keySet.forEach[
+				val details = systems.get(it)
+				stringBuilder.append('\n').append(it.toString)
+				
+				// Tra parentesi tonde inserisco il nome, se impostato, o l'id del sistema
+				if(details.name.empty) {
+					stringBuilder.append('(')
+						.append(details.id)
+						.append(')')
+				} else {
+					stringBuilder.append('(')
+						.append(details.name)
+						.append(')')
+				}
+			]
+			info("Systems connected : " + stringBuilder.toString)
+		}
+	}
+	
+	private def showCommandsList {
+		val stringBuilder = new StringBuilder("\n\nAvailable commands: \n")
+		stringBuilder.append("\n" + back + " - Go back to main menu")
+		stringBuilder.append("\n" + list + " - Show a list of connected systems")
+		stringBuilder.append("\n" + detail + " <id> - Get the details of the system with the given <id>")
+		stringBuilder.append("\n" + set_name + " - <name> - Set the system's name")
+		stringBuilder.append("\n" + set_on + " - Turn on all the systems")
+		stringBuilder.append("\n" + set_off + " - Turn off all the systems")
+		stringBuilder.append("\n" + set_on + " <id> - Turn on the system identified with the given <id>")
+		stringBuilder.append("\n" + set_off + " <id> - Turn off the system identified with the given <id>")	
+		stringBuilder.append("\n" + send_broadcast + " <message> - Send a broadcast message");
+		stringBuilder.append("\n" + send_to + " <id> <message> - Send a message to the specified client");
+		stringBuilder.append("\n" + stop_alarm + " <id> - Stop alarm state of the system identified by <id>")
+		stringBuilder.append("\n")
+		info(stringBuilder.toString)
+	}
+}

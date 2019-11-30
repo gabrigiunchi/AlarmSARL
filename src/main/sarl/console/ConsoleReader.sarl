@@ -1,0 +1,97 @@
+package console
+
+import io.sarl.core.Initialize
+import java.io.InputStreamReader
+import java.io.BufferedReader
+import io.sarl.core.Logging
+import io.sarl.core.Lifecycle
+import console.ConsoleHandlerCapacity
+import io.sarl.lang.core.Skill
+import utilities.UserSettings
+import boot.ConfigurationDone
+import model.ConsoleHandlerType
+import io.sarl.core.Behaviors
+import io.sarl.core.Destroy
+import io.sarl.core.Schedules
+import java.io.IOException
+import view.PasswordCorrect
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Agente che riceve gli input dell'utente sulla linea di comando e delega la gestione del messaggio
+ * ad una capacity
+ *
+ */
+agent ConsoleReader {
+	
+	uses Lifecycle, Logging, ConsoleHandlerCapacity, Behaviors, Schedules
+	
+	var console : BufferedReader
+	val task = task("console_task")
+	
+	on Initialize {
+		info("Initializing ConsoleReader...")
+		console = new BufferedReader(new InputStreamReader(System.in))
+		info("ConsoleReader ready")
+		
+		
+		/* 
+		 * Se bisogna configurare l'applicazione entro nella sezione per la configurazione,
+		 * altrimenti nella sezione principale
+		 * 
+		 */
+		if(UserSettings.needInstallation) {
+			setSkill(ConsoleHandlerCapacity, new ConfigurationConsoleHandler)
+		} /*else {
+			setSkill(ConsoleHandlerCapacity, new MainConsoleHandler)
+		}*/
+		
+		/*
+		 * Task che legge la stringa immessa sulla command line 
+		 * e delega la gestione del comando alla Capacity ConsoleHandlerCapacity
+		 */
+		task.every(20)[
+			try {
+				val read = console.readLine
+				
+				// Se lo stream viene chiuso la variabile read è uguale a null e potrebbe causare errori
+				if(read != null) {
+					handleConsoleMessage(read)
+				}
+			} catch(e : IOException) {
+				error(e.toString)
+				task.cancel
+				killMe
+			}
+		]
+	}
+	
+	on SwitchConsoleHandler {
+		val type = occurrence.type
+		
+		var newSkill : Skill = new MainConsoleHandler
+		
+		switch type {
+			case io : newSkill = new SerialCommunicationConsoleHandler
+			case net : newSkill = new SystemCommunicationConsoleHandler
+			case main : newSkill = new MainConsoleHandler
+			case access : newSkill = new LoginConsoleHandler
+			default : { }
+		}
+		
+		setSkill(ConsoleHandlerCapacity, newSkill)
+	}
+	
+	on ConfigurationDone {
+		wake(new SwitchConsoleHandler(ConsoleHandlerType.access))
+	}
+	
+	on PasswordCorrect {
+		wake(new SwitchConsoleHandler(ConsoleHandlerType.main))
+	}
+	
+	on Destroy {
+		info("Destroying ConsoleReader...")
+	}
+}

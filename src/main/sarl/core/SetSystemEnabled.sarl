@@ -1,0 +1,16 @@
+package core
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Evento che serve per attivare/disattivare un sistema
+ *
+ */
+event SetSystemEnabled {
+	
+	val enabled : boolean
+	
+	new(s : boolean) {
+		this.enabled = s
+	}
+}

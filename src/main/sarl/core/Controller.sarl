@@ -1,0 +1,44 @@
+package core
+
+import static utilities.Utilities.getSystems
+import io.sarl.core.Logging
+import io.sarl.core.DefaultContextInteractions
+import view.UpdateView
+import core.SystemDetailsUpdated
+import schedule.AlarmScheduleManager
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Controller dell'applicazione che coordina la view con gli eventi lanciati dal model
+ *
+ */
+agent Controller {
+	
+	uses Logging, DefaultContextInteractions
+	
+	on SystemConnected {
+		val key = occurrence.key
+		systems.put(key, occurrence.systemDetails)
+		info("New client connected with id : " + key)
+		emit(new UpdateView)
+	}
+	
+	on SystemDisconnected {
+		info("Connection with client " + occurrence.key + " closed")
+		
+		// Rimuovo gli schedule associati al sistema
+		val success = AlarmScheduleManager.instance.removeSchedulesOfSystem(systems.get(occurrence.key).id)
+		if(success) {
+			info("Rimossi con successo alarm scheduler del sistema " + occurrence.key)
+		}
+		
+		// Rimuovo il sistema dalla lista e aggiorno la view
+		systems.remove(occurrence.key)
+		emit(new UpdateView)
+	}
+	
+	on SystemDetailsUpdated {
+		emit(new UpdateView)
+	}
+}

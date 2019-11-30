@@ -1,0 +1,41 @@
+package console
+
+import console.ConsoleHandlerCapacity
+import io.sarl.core.Logging
+import io.sarl.core.DefaultContextInteractions
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import utilities.UserSettings
+import boot.ConfigurationDone
+
+/**
+ * @author Gabriele Giunchi
+ * 
+ * Skill che implementa ConsoleHandlerCapacity e che gestisce la configurazione iniziale dell'applicazione
+ *
+ */
+skill ConfigurationConsoleHandler implements ConsoleHandlerCapacity {
+	
+	uses Logging, DefaultContextInteractions
+	
+	var console : BufferedReader
+	
+	override install {
+		super.install
+		info("Application needs configuration, please type a new password")
+		console = new BufferedReader(new InputStreamReader(System.in))
+	}
+
+	override handleConsoleMessage(firstPassword : String) {
+		info("Insert the password again")
+		val secondPassword = console.readLine
+		
+		if(!firstPassword.empty && firstPassword.equals(secondPassword)) {
+			info("Password set correctly")
+			UserSettings.configureApplication(firstPassword)
+			emit(new ConfigurationDone)
+		} else {
+			info("The two passwords must be the same, try again")
+		}
+	}
+}
